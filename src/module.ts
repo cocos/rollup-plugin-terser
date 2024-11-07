@@ -1,29 +1,45 @@
-import { fileURLToPath } from 'url';
+/* eslint-disable no-console */
+import { fileURLToPath, pathToFileURL } from 'url';
 
 import type { NormalizedOutputOptions, RenderedChunk } from 'rollup';
 import { hasOwnProperty, isObject, merge } from 'smob';
 
-import type { Options } from './type';
-import { WorkerPool } from './worker-pool';
+import { Worker } from 'jest-worker';
+import serializeJavascript from 'serialize-javascript';
+
+import type { Options, TerserWorker } from './type';
 
 export default function terser(input: Options = {}) {
   const { maxWorkers, ...options } = input;
 
-  let workerPool: WorkerPool | null | undefined;
+  let worker: TerserWorker | null | undefined;
   let numOfChunks = 0;
-  let numOfWorkersUsed = 0;
+
+  const currentScriptURL =
+    typeof __filename !== 'undefined' ? pathToFileURL(__filename) : import.meta.url;
 
   return {
     name: 'terser',
 
     async renderChunk(code: string, chunk: RenderedChunk, outputOptions: NormalizedOutputOptions) {
-      if (!workerPool) {
-        workerPool = new WorkerPool({
-          filePath: fileURLToPath(import.meta.url),
-          maxWorkers
-        });
-      }
+      if (!worker) {
+        worker = new Worker(fileURLToPath(currentScriptURL), {
+          numWorkers: maxWorkers
+        }) as TerserWorker;
 
+        const stdout = worker.getStdout();
+        const stderr = worker.getStderr();
+
+        stdout.on('data', (data) => {
+          console.log(`[Terser Worker stdout]: ${data}`);
+        });
+
+        stderr.on('data', (data) => {
+          console.error(`[Terser Worker stderr]: ${data}`);
+        });
+
+        numOfChunks = 0;
+      }
       numOfChunks += 1;
 
       const defaultOptions: Options = {
@@ -43,10 +59,10 @@ export default function terser(input: Options = {}) {
           code: result,
           nameCache,
           sourceMap
-        } = await workerPool.addAsync({
+        } = await worker.runWorker(
           code,
-          options: merge({}, options || {}, defaultOptions)
-        });
+          serializeJavascript(merge({}, options || {}, defaultOptions))
+        );
 
         if (options.nameCache && nameCache) {
           let vars: Record<string, any> = {
@@ -91,15 +107,13 @@ export default function terser(input: Options = {}) {
       } finally {
         numOfChunks -= 1;
         if (numOfChunks === 0) {
-          numOfWorkersUsed = workerPool.numWorkers;
-          workerPool.close();
-          workerPool = null;
+          const { forceExited } = await worker.end();
+          if (forceExited) {
+            console.error('Workers failed to exit gracefully');
+          }
+          worker = null;
         }
       }
-    },
-
-    get numOfWorkersUsed() {
-      return numOfWorkersUsed;
     }
   };
 }
