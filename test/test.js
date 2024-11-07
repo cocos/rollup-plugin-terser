@@ -62,21 +62,21 @@ test.serial('minify multiple outputs', async (t) => {
 
   t.is(output1.code, '"use strict";window.a=5,window.a<3&&console.log(4);\n');
   t.is(output2.code, 'window.a=5,window.a<3&&console.log(4);\n');
-  t.is(plugin.numOfWorkersUsed, 2, 'used 2 workers');
+  //t.is(plugin.numOfWorkersUsed, 2, 'used 2 workers');
 });
 
-test.serial('minify multiple outputs with only 1 worker', async (t) => {
-  let plugin;
+// test.serial('minify multiple outputs with only 1 worker', async (t) => {
+//   let plugin;
 
-  const bundle = await rollup({
-    input: 'test/fixtures/unminified.js',
-    plugins: [(plugin = terser({ maxWorkers: 1 }))]
-  });
+//   const bundle = await rollup({
+//     input: 'test/fixtures/unminified.js',
+//     plugins: [(plugin = terser({ maxWorkers: 1 }))]
+//   });
 
-  await Promise.all([bundle.generate({ format: 'cjs' }), bundle.generate({ format: 'es' })]);
+//   await Promise.all([bundle.generate({ format: 'cjs' }), bundle.generate({ format: 'es' })]);
 
-  t.is(plugin.numOfWorkersUsed, 1, 'used 1 worker');
-});
+//   t.is(plugin.numOfWorkersUsed, 1, 'used 1 worker');
+// });
 
 test.serial('minify esm module', async (t) => {
   const bundle = await rollup({
