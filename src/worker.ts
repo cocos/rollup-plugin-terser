@@ -1,58 +1,28 @@
-import { isMainThread, parentPort, workerData } from 'worker_threads';
-
-import { hasOwnProperty, isObject } from 'smob';
+import { isObject } from 'smob';
 
 import { minify } from 'terser';
 
-import { workerPoolWorkerFlag } from './constants';
+import type { WorkerOutput } from './type';
 
-import type { WorkerContextSerialized, WorkerOutput } from './type';
+// eslint-disable-next-line no-eval
+const eval2 = eval;
 
-/**
- * Duck typing worker context.
- *
- * @param input
- */
-function isWorkerContextSerialized(input: unknown): input is WorkerContextSerialized {
-  return (
-    isObject(input) &&
-    hasOwnProperty(input, 'code') &&
-    typeof input.code === 'string' &&
-    hasOwnProperty(input, 'options') &&
-    typeof input.options === 'string'
-  );
-}
+export async function runWorker(code: string, optionsString: string): Promise<WorkerOutput> {
+  const options = eval2(`(${optionsString})`);
 
-export function runWorker() {
-  if (isMainThread || !parentPort || workerData !== workerPoolWorkerFlag) {
-    return;
+  const result = await minify(code, options);
+  const output: WorkerOutput = {
+    code: result.code || code,
+    nameCache: options.nameCache
+  };
+
+  if (typeof result.map === 'string') {
+    output.sourceMap = JSON.parse(result.map);
   }
 
-  // eslint-disable-next-line no-eval
-  const eval2 = eval;
+  if (isObject(result.map)) {
+    output.sourceMap = result.map;
+  }
 
-  parentPort.on('message', async (data: WorkerContextSerialized) => {
-    if (!isWorkerContextSerialized(data)) {
-      return;
-    }
-
-    const options = eval2(`(${data.options})`);
-
-    const result = await minify(data.code, options);
-
-    const output: WorkerOutput = {
-      code: result.code || data.code,
-      nameCache: options.nameCache
-    };
-
-    if (typeof result.map === 'string') {
-      output.sourceMap = JSON.parse(result.map);
-    }
-
-    if (isObject(result.map)) {
-      output.sourceMap = result.map;
-    }
-
-    parentPort?.postMessage(output);
-  });
+  return output;
 }
