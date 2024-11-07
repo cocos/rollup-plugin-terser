@@ -63,7 +63,8 @@
   "dependencies": {
     "serialize-javascript": "^6.0.1",
     "smob": "^1.0.0",
-    "terser": "^5.17.4"
+    "terser": "^5.17.4",
+    "jest-worker": "^29.7.0"
   },
   "devDependencies": {
     "@types/node": "^22.8.7",
