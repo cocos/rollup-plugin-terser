@@ -3,6 +3,87 @@ const { rollup } = require('rollup');
 
 const terser = require('../');
 
+test.serial('inherit', async (t) => {
+  const nameCache = {};
+
+  const bundle = await rollup({
+    input: ['test/fixtures/sub.js', 'test/fixtures/sub2.js'],
+    plugins: [terser(
+      {
+        compress: {
+            reduce_funcs: false,
+            keep_fargs: false,
+            unsafe_Function: true,
+            unsafe_math: true,
+            unsafe_methods: true,
+            passes: 2,
+        },
+        mangle: {
+            properties: {
+                regex: /^[a-zA-Z_][a-zA-Z0-9_]{3,}\$$/,
+            }
+        },
+        keep_fnames: false,
+        output: {
+            beautify: true,
+        },
+        nameCache,
+        maxWorkers: 0,
+      }
+    )]
+  });
+  const result = await bundle.generate({ format: 'system' });
+  t.is(result.output.length, 3);
+  const [output1, output2, output3] = result.output;
+  t.is(output1.code, `System.register([ "./base-7xu-expY.js" ], (function(e) {
+    "use strict";
+    var s;
+    return {
+        setters: [ function(t) {
+            s = t.B, e("Base", t.B);
+        } ],
+        execute: function() {
+            e("Sub", class extends s {
+                t="hello";
+                foo() {
+                    this.t = "world", this.o = 456;
+                }
+            });
+        }
+    };
+}));
+`);
+  t.is(output2.code, `System.register([ "./base-7xu-expY.js" ], (function(t) {
+    "use strict";
+    var e;
+    return {
+        setters: [ function(t) {
+            e = t.B;
+        } ],
+        execute: function() {
+            t("Sub2", class extends e {
+                u="hello2";
+                foo() {
+                    this.u = "world2", this.o = 789;
+                }
+            });
+        }
+    };
+}));
+`);
+  t.is(output3.code, `System.register([], (function(t) {
+    "use strict";
+    return {
+        execute: function() {
+            t("B", class {
+                o=100;
+            });
+        }
+    };
+}));
+`)
+});
+
 test.serial('minify', async (t) => {
   const bundle = await rollup({
     input: 'test/fixtures/unminified.js',

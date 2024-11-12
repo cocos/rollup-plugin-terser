@@ -7,11 +7,12 @@ import { hasOwnProperty, isObject, merge } from 'smob';
 import { Worker } from 'jest-worker';
 import serializeJavascript from 'serialize-javascript';
 
-import type { Options, TerserWorker } from './type';
+import type { Options, TerserWorker, WorkerOutput } from './type';
+import { transform } from './worker';
 
 export default function terser(input: Options = {}) {
   const { maxWorkers, ...options } = input;
-
+  const useWorker = maxWorkers === undefined || maxWorkers > 0;
   let worker: TerserWorker | null | undefined;
   let numOfChunks = 0;
 
@@ -22,7 +23,7 @@ export default function terser(input: Options = {}) {
     name: 'terser',
 
     async renderChunk(code: string, chunk: RenderedChunk, outputOptions: NormalizedOutputOptions) {
-      if (!worker) {
+      if (!worker && useWorker) {
         worker = new Worker(fileURLToPath(currentScriptURL), {
           numWorkers: maxWorkers
         }) as TerserWorker;
@@ -55,14 +56,19 @@ export default function terser(input: Options = {}) {
       }
 
       try {
+        let output: WorkerOutput;
+        const mergedOptions = merge({}, options || {}, defaultOptions);
+        if (useWorker && worker) {
+          output = await worker.runWorker(code, serializeJavascript(mergedOptions));
+        } else {
+          output = await transform(code, mergedOptions);
+        }
+
         const {
           code: result,
           nameCache,
           sourceMap
-        } = await worker.runWorker(
-          code,
-          serializeJavascript(merge({}, options || {}, defaultOptions))
-        );
+        } = output;
 
         if (options.nameCache && nameCache) {
           let vars: Record<string, any> = {
@@ -106,7 +112,7 @@ export default function terser(input: Options = {}) {
         return Promise.reject(e);
       } finally {
         numOfChunks -= 1;
-        if (numOfChunks === 0) {
+        if (numOfChunks === 0 && worker) {
           const { forceExited } = await worker.end();
           if (forceExited) {
             console.error('Workers failed to exit gracefully');
